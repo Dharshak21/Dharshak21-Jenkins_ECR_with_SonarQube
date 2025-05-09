@@ -24,7 +24,7 @@ pipeline {
     stages {
         stage('Clone the Git Repository') {
             steps {
-                git branch: 'main', credentialsId: "${Git_Credentials_Id}", url: "${Git_Hub_URL}"
+                git branch: 'main', credentialsId: 'Git_Credentials', url: 'https://github.com/Dharshak21/Jenkins_ECR_with_SonarQube'
             }
         }
         
