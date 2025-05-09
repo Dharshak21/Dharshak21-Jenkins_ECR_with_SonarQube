@@ -22,4 +22,3 @@ sudo docker run -d --name sonarqube -p 9000:9000 sonarqube
 sudo docker pull owasp/zap2docker-stable
 sudo docker run -dt --name owasp owasp/zap2docker-stable /bin/bash
 sudo docker exec owasp mkdir /zap/wrk
-
