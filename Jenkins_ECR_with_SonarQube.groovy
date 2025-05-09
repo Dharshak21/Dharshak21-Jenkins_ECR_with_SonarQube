@@ -14,74 +14,52 @@ pipeline {
         string(name: 'AWS_Credentials_Id', defaultValue: 'AWS_Credentials', description: 'AWS Credentials Id')
         string(name: 'Git_Credentials_Id', defaultValue: 'Github_Credentials', description: 'Git Credentials Id')
         string(name: 'SONAR_PROJECT_NAME', defaultValue: 'SonarScannerCheck', description: 'Sonar Project Name (Default: SonarScannerCheck)')
+        string(name: 'SONAR_TOKEN_ID', defaultValue: 'sonarqube-token', description: 'SonarQube Token Credentials ID')
     }
     
     environment {
         ECR_Credentials = "ecr:${Region_Name}:AWS_Credentials"
         S3_Url = 'https://yamlclusterecs1.s3.amazonaws.com/master.yaml'
+        SONAR_HOST_URL = 'http://localhost:9000'
     }
     
     stages {
         stage('Clone the Git Repository') {
             steps {
-                git branch: 'main', credentialsId: 'Git_Credentials', url: 'https://github.com/Dharshak21/Jenkins_ECR_with_SonarQube'
+                git branch: 'main', 
+                       credentialsId: "${Git_Credentials_Id}", 
+                       url: "${Git_Hub_URL}"
             }
         }
         
-        stage('Docker start') {
+        stage('Docker Setup') {
             steps {
                 script {
                     sh '''
-                    # Check Docker socket permissions (optional, usually not needed if Jenkins is in docker group)
-                    if [ ! -w /var/run/docker.sock ]; then
-                        echo "Jenkins does not have write access to Docker socket."
-                        exit 1
-                    fi
-
-                    # Start containers with error handling
-                    docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 sonarqube
+                    # Ensure Docker access
+                    sudo chmod 666 /var/run/docker.sock || true
+                    
+                    # Start containers
+                    docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 -e SONAR_FORCEAUTHENTICATION=false sonarqube
                     docker start zaproxy || docker run -dt --name zaproxy -p 8082:8080 zaproxy/zap-stable:latest /bin/bash
-
-                    # Create directory inside ZAP container if it doesn't exist
                     docker exec zaproxy mkdir -p /zap/wrk || true
-
-                    # Save public IP to file (optional)
                     curl -s ipinfo.io/ip > ip.txt
                     '''
                 }
             }
         }
         
-        stage('Test Docker Access') {
+        stage('Wait for SonarQube') {
             steps {
                 script {
-                    sh 'docker ps'
-                }
-            }
-        }
-        
-        stage('Wait for SonarQube to Start') {
-            steps {
-                script {
-                    // More reliable wait using curl
-                    def sonarReady = false
-                    def attempts = 0
-                    while (!sonarReady && attempts < 30) {
-                        attempts++
+                    waitUntil {
                         try {
-                            def response = sh(script: 'curl -s -o /dev/null -w "%{http_code}" http://localhost:9000', returnStdout: true).trim()
-                            if (response == "200") {
-                                sonarReady = true
-                                echo "SonarQube is ready!"
-                            } else {
-                                sleep 10
-                            }
+                            def status = sh(script: 'curl -s -o /dev/null -w "%{http_code}" ${SONAR_HOST_URL}/api/system/status', returnStdout: true).trim()
+                            return status == "200"
                         } catch (Exception e) {
                             sleep 10
+                            return false
                         }
-                    }
-                    if (!sonarReady) {
-                        error("SonarQube did not start within 5 minutes")
                     }
                 }
             }
@@ -91,30 +69,40 @@ pipeline {
             steps {
                 script {
                     def scannerHome = tool 'sonarqube'
-                    withSonarQubeEnv('Default') {
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_NAME}"
+                    
+                    // Using token authentication
+                    withCredentials([string(credentialsId: "${SONAR_TOKEN_ID}", variable: 'SONAR_TOKEN')]) {
+                        withSonarQubeEnv('Default') {
+                            sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${SONAR_PROJECT_NAME} \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_TOKEN} \
+                            -Dsonar.projectBaseDir=${WORKSPACE} \
+                            -Dsonar.sources=. \
+                            -Dsonar.sourceEncoding=UTF-8
+                            """
+                        }
                     }
                 }
             }
         }
         
-        stage('Send Sonar Analysis Report and Approval Email for Build Image') {
+        stage('Send Sonar Analysis Report') {
             steps {
                 script {
                     def Jenkins_IP = sh(returnStdout: true, script: 'cat ip.txt').trim()
                     emailext (
-                        subject: "Approval Needed to Build Docker Image",
+                        subject: "Approval Needed: ${SONAR_PROJECT_NAME} Analysis",
                         body: """
-                        SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}
-                        Username: admin
-                        Password: Sonarqube01@
-                        Please Approve to Build the Docker Image in Testing Environment
-                        ${BUILD_URL}input/
+                        <h2>SonarQube Analysis Report</h2>
+                        <p>URL: <a href="http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}">http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}</a></p>
+                        <p>Please approve the build process:</p>
+                        <p><a href="${BUILD_URL}input/">Approve Build</a></p>
                         """,
                         mimeType: 'text/html',
-                        recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                        from: "dummymail",
-                        to: "${MailToRecipients}",              
+                        to: "${MailToRecipients}",
+                        from: "jenkins@example.com"
                     )
                 }
             }
@@ -123,12 +111,16 @@ pipeline {
         stage('Approval-Build Image') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Please approve the build image process by clicking the link provided in the email.', ok: 'Proceed'
+                    input message: 'Approve Docker image build?', 
+                          ok: 'Proceed',
+                          parameters: [
+                              string(name: 'VERSION', description: 'Version to deploy', defaultValue: "${Version_Number}")
+                          ]
                 }
             }
         }
         
-        stage('Create a ECR Repository') {
+        stage('Create ECR Repository') {
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -136,33 +128,66 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) 
                 {
-                    sh '''
-                    aws ecr create-repository --repository-name ${ECR_Repo_Name} --region ${Region_Name} || true
-                    cd /var/lib/jenkins/workspace/${Workspace_name}
-                    '''
+                    sh """
+                    aws ecr create-repository \
+                        --repository-name ${ECR_Repo_Name} \
+                        --region ${Region_Name} \
+                        --image-scanning-configuration scanOnPush=true \
+                        --image-tag-mutability MUTABLE || true
+                    """
                 }
             }
         }
         
-        stage('Build and Push the Docker Image to ECR Repository') {
+        stage('Build and Push to ECR') {
             steps {
-                withDockerRegistry(credentialsId: "${ECR_Credentials}", url: "https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com") 
-                {
-                    script {
-                        def DockerfilePath = sh(script: 'find -name ${Docker_File_Name} | head -1', returnStdout: true).trim()
-                        DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
-                        echo("Dockerfile path: ${DockerfilePath}")
-                        
-                        // Get ECR login
+                script {
+                    def DockerfilePath = sh(script: "find . -name ${Docker_File_Name} | head -1", returnStdout: true).trim()
+                    DockerfilePath = DockerfilePath.replaceAll('^\\./', '')
+                    
+                    withDockerRegistry(credentialsId: "${ECR_Credentials}", 
+                                      url: "https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com") 
+                    {
                         sh """
-                        aws ecr get-login-password --region ${Region_Name} | docker login --username AWS --password-stdin ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com
+                        # Login to ECR
+                        aws ecr get-login-password --region ${Region_Name} | \
+                        docker login --username AWS --password-stdin ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com
+                        
+                        # Build and tag
                         docker build -t ${ECR_Repo_Name} -f ${DockerfilePath} .
-                        docker tag ${ECR_Repo_Name}:latest ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                        docker tag ${ECR_Repo_Name}:latest \
+                            ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                        
+                        # Push
                         docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
                         """
                     }
                 }
             }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                // Clean up containers
+                sh 'docker stop sonarqube zaproxy || true'
+                sh 'docker rm sonarqube zaproxy || true'
+            }
+        }
+        failure {
+            emailext (
+                subject: "FAILED: ${currentBuild.fullDisplayName}",
+                body: "Build failed. Check: ${BUILD_URL}",
+                to: "${MailToRecipients}"
+            )
+        }
+        success {
+            emailext (
+                subject: "SUCCESS: ${currentBuild.fullDisplayName}",
+                body: "Image pushed to ECR: ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}",
+                to: "${MailToRecipients}"
+            )
         }
     }
 }
