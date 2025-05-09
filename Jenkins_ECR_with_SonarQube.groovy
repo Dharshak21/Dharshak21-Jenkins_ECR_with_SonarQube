@@ -51,6 +51,18 @@ pipeline {
         }
     }
 }
+        pipeline {
+    agent any
+    stages {
+        stage('Test Docker Access') {
+            steps {
+                script {
+                    sh 'docker ps'
+                }
+            }
+        }
+    }
+}
         
         stage('Wait for SonarQube to Start') {
             steps {
