@@ -1,0 +1,77 @@
+name: Jenkins AMI Semgrep
+
+on:
+  workflow_dispatch:
+    # secrets:
+    #   Repo_token:
+    #     required: true
+    #   AWS_STS:
+    #     required: true
+
+env:
+  BUCKET_NAME : "semgrep-report"
+  AWS_REGION : "eu-west-1"
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  semgrep-full:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout ELK-Stack-AMI repository
+      - name: Checkout ELK-Stack-AMI repository
+        uses: actions/checkout@v3
+        with:
+          repository: yobitelcomm/Jenkins-AMI
+          ref: main
+          path: .
+          # token: ${{ secrets.Repo_token }}
+
+      # Step 2: Install Semgrep
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          python3 -m pip install semgrep
+      
+      # Step 3: Code scan
+      - name: Scan
+        env:
+          SEMGREP_RULES_PATH: ./Jenkins-AMI
+        run: |
+          # Navigate to the directory containing the scripts
+          #cd ./Jenkins-AMI
+
+          # Run Semgrep scan
+          semgrep --config "p/ci" --config auto . --output jenkinsreport.json --json || echo "Semgrep scan failed"
+
+      # Step 4: Get current date  
+      #- name: Get current date
+        #id: date
+        #run: echo "::set-output name=date::$(date +'%d-%m-%Y')"
+
+      # Step 5: Push report to artifact
+      - name: Save report as pipeline artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: jenkinsreport
+          path: ./jenkinsreport.json
+
+      # Step 6: Display scan summary
+      #- name: Get current file
+        #id: scan_summary
+        #run: cat scanSummary.txt
+          
+      # # Step 7: Authenticate with AWS
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v2
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_STS }}
+      #     role-session-name: GHASeesion
+      #     aws-region: ${{ env.AWS_REGION }}
+      
+      # # Step 8: Upload a file to AWS S3
+      # - name: Uploading report to S3
+      #   run: |
+      #     aws s3 cp ./$(date +"%d-%m-%Y").json s3://${{ env.BUCKET_NAME }}/${{ github.event.repository.name }}/

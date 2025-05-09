@@ -1,0 +1,76 @@
+name: Jenkins-AMI
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: 'Variable for static code analysis workflow'
+        required: true
+        default: 'yobitelcomm/Jenkins-AMI'
+      branch:
+        description: 'Branch to scan '
+        required: true
+        default: 'main'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    
+      - name: Trigger Static Code Analysis Workflow
+        id: static-analysis
+        uses: peter-evans/repository-dispatch@v1
+        with:
+          token: ${{ secrets.REPO_TOKEN }}
+          repository: yobitelcomm/DevSecOps-Pipeline
+          event-type: Semgrep weekly Scan
+          client-payload: '{"repo_name": "${{ github.event.inputs.repo_name }}" , "branch": "${{ github.event.inputs.branch }}"}'
+          
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy EC2 instance
+        id: create-instance
+        run: |
+          instance_id=$(aws ec2 run-instances \
+            --image-id ami-0c7217cdde317cfec \
+            --instance-type t3.medium \
+            --key-name MarketPlace \
+            --subnet-id subnet-08a65f2f456b48585 \
+            --security-group-ids sg-00d78466e3c2a319a \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=Jenkins},{Key=test,Value=Marketplace}]' \
+            --user-data "$user_data" \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+          echo "EC2 instance created with ID: $instance_id"
+          echo "::set-output name=instance_id::$instance_id"
+          aws ec2 wait instance-status-ok --instance-ids $instance_id
+          # Retrieve public IP address of the instance
+          public_ip=$(aws ec2 describe-instances \
+            --instance-ids $instance_id \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "Public IP address of the instance: $public_ip"
+          echo "::set-output name=public_ip::$public_ip"
+
+      - name: SSH into EC2 Instance and run script
+        run: |
+          # Retrieve the public IP address from the previous step's output
+          ec2_public_ip=${{ steps.create-instance.outputs.public_ip }}
+          # Set correct permissions for the private key file
+          echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          # Make the script executable
+          chmod +x Jenkins-AMI/Bashscript.sh
+          # SSH into the EC2 instance and execute the script using the private key
+          scp -i private_key.pem -o StrictHostKeyChecking=no -r Jenkins-AMI/ ubuntu@$ec2_public_ip:/home/ubuntu
+          ssh -vvv -o StrictHostKeyChecking=no -i private_key.pem ubuntu@$ec2_public_ip 'bash -s' < Jenkins-AMI/Bashscript.sh
+
+      
