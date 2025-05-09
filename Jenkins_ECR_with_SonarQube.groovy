@@ -48,9 +48,10 @@ pipeline {
                     withCredentials([string(credentialsId: 'SonarQube', variable: 'SONAR_TOKEN')]) {
                         withSonarQubeEnv('Default') {
                             sh """
-                                sonar-scanner \
+                                #!/bin/bash
+                                ${tool 'SonarScanner'}/bin/sonar-scanner \
                                 -Dsonar.projectKey=${SONAR_PROJECT_NAME} \
-                                -Dsonar.host.url=http://18.170.49.145:9000 \
+                                -Dsonar.host.url=http://localhost:9000 \
                                 -Dsonar.login=$SONAR_TOKEN
                             """
                         }
