@@ -51,8 +51,6 @@ pipeline {
         }
     }
 }
-        pipeline {
-    agent any
     stages {
         stage('Test Docker Access') {
             steps {
