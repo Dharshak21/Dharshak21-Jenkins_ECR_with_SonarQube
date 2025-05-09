@@ -29,7 +29,7 @@ pipeline {
         stage('Docker start') {
             steps {
                 sh '''
-                sudo chmod 666 /var/run/docker.sock
+                docker ps
                 docker start sonarqube
                 docker start zaproxy
                 curl ipinfo.io/ip > ip.txt
