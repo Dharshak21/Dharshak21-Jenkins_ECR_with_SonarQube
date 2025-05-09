@@ -42,23 +42,6 @@ pipeline {
                 }
             }
         }
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    withCredentials([string(credentialsId: 'SonarQube', variable: 'SONAR_TOKEN')]) {
-                        withSonarQubeEnv('Default') {
-                            sh """
-                                #!/bin/bash
-                                ${tool 'SonarScanner'}/bin/sonar-scanner \
-                                -Dsonar.projectKey=${SONAR_PROJECT_NAME} \
-                                -Dsonar.host.url=http://localhost:9000 \
-                                -Dsonar.login=$SONAR_TOKEN
-                            """
-                        }
-                    }
-                }
-            }
-        }
         stage('Send Sonar Analysis Report and Approval Email for Build Image') {
             steps {
                 script {
