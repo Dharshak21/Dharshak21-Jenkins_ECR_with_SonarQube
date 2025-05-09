@@ -29,25 +29,28 @@ pipeline {
         }
         
         stage('Docker start') {
-            steps {
-                script {
-                    // Alternative approach to Docker permissions
-                    sh '''
-                    if ! sudo chmod 666 /var/run/docker.sock; then
-                        echo "Failed to change Docker socket permissions, trying alternative approach"
-                        sudo usermod -aG docker jenkins
-                        sudo systemctl restart docker
-                    fi
-                    
-                    # Start containers with error handling
-                    docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 sonarqube
-                    docker start zaproxy || docker run -dt --name zaproxy -p 8082:8080 zaproxy/zap-stable:latest /bin/bash
-                    docker exec zaproxy mkdir -p /zap/wrk || true
-                    curl -s ipinfo.io/ip > ip.txt
-                    '''
-                }
-            }
+    steps {
+        script {
+            sh '''
+            # Check Docker socket permissions (optional, usually not needed if Jenkins is in docker group)
+            if [ ! -w /var/run/docker.sock ]; then
+                echo "Jenkins does not have write access to Docker socket."
+                exit 1
+            fi
+
+            # Start containers with error handling
+            docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 sonarqube
+            docker start zaproxy || docker run -dt --name zaproxy -p 8082:8080 zaproxy/zap-stable:latest /bin/bash
+
+            # Create directory inside ZAP container if it doesn't exist
+            docker exec zaproxy mkdir -p /zap/wrk || true
+
+            # Save public IP to file (optional)
+            curl -s ipinfo.io/ip > ip.txt
+            '''
         }
+    }
+}
         
         stage('Wait for SonarQube to Start') {
             steps {
