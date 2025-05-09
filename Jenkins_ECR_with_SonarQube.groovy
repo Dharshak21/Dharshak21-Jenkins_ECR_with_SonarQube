@@ -29,29 +29,29 @@ pipeline {
         }
         
         stage('Docker start') {
-    steps {
-        script {
-            sh '''
-            # Check Docker socket permissions (optional, usually not needed if Jenkins is in docker group)
-            if [ ! -w /var/run/docker.sock ]; then
-                echo "Jenkins does not have write access to Docker socket."
-                exit 1
-            fi
+            steps {
+                script {
+                    sh '''
+                    # Check Docker socket permissions (optional, usually not needed if Jenkins is in docker group)
+                    if [ ! -w /var/run/docker.sock ]; then
+                        echo "Jenkins does not have write access to Docker socket."
+                        exit 1
+                    fi
 
-            # Start containers with error handling
-            docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 sonarqube
-            docker start zaproxy || docker run -dt --name zaproxy -p 8082:8080 zaproxy/zap-stable:latest /bin/bash
+                    # Start containers with error handling
+                    docker start sonarqube || docker run -d --name sonarqube -p 9000:9000 sonarqube
+                    docker start zaproxy || docker run -dt --name zaproxy -p 8082:8080 zaproxy/zap-stable:latest /bin/bash
 
-            # Create directory inside ZAP container if it doesn't exist
-            docker exec zaproxy mkdir -p /zap/wrk || true
+                    # Create directory inside ZAP container if it doesn't exist
+                    docker exec zaproxy mkdir -p /zap/wrk || true
 
-            # Save public IP to file (optional)
-            curl -s ipinfo.io/ip > ip.txt
-            '''
+                    # Save public IP to file (optional)
+                    curl -s ipinfo.io/ip > ip.txt
+                    '''
+                }
+            }
         }
-    }
-}
-    stages {
+        
         stage('Test Docker Access') {
             steps {
                 script {
@@ -59,8 +59,6 @@ pipeline {
                 }
             }
         }
-    }
-}
         
         stage('Wait for SonarQube to Start') {
             steps {
@@ -167,3 +165,4 @@ pipeline {
             }
         }
     }
+}
