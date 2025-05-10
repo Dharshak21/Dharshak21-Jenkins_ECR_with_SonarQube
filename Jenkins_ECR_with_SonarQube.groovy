@@ -14,7 +14,6 @@ pipeline {
         string(name: 'AWS_Credentials_Id',defaultValue: 'AWS_Credentials', description: 'AWS Credentials Id')
         string(name: 'Git_Credentials_Id',defaultValue: 'Github_Credentials',description: 'Git Credentials Id')
         string(name: 'SONAR_PROJECT_NAME',defaultValue: 'SonarScannerCheck' ,description: 'Sonar Project Name (Default: SonarScannerCheck)')
-        
     }
     environment {
         ECR_Credentials = "ecr:${Region_Name}:AWS_Credentials"
@@ -24,32 +23,22 @@ pipeline {
         stage('Clone the Git Repository') {
             steps {
                 git branch: 'main', credentialsId: "${Git_Credentials_Id}", url: "${Git_Hub_URL}"
-                }
+            }
         }
         stage('Docker start') {
             steps {
                 sh '''
-                sudo chmod 666 /var/run/docker.sock
+                docker ps
                 docker start sonarqube
                 docker start zaproxy
                 curl ipinfo.io/ip > ip.txt
                 '''
             }
         }
-     stage('Wait for SonarQube to Start') {
-          steps {
-               script {
-                   sleep 120 
-               }
-            }
-        }
-        stage('SonarQube Analysis') {
+        stage('Wait for SonarQube to Start') {
             steps {
-            script {
-                def scannerHome = tool 'sonarqube'; 
-                withSonarQubeEnv('Default')  {
-                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_NAME}"
-                    }
+                script {
+                    sleep 120 
                 }
             }
         }
@@ -60,16 +49,16 @@ pipeline {
                         returnStdout: true,
                         script: 'cat ip.txt'
                     )
-                emailext (
-                    subject: "Approval Needed to Build Docker Image",
-                    body: "SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME} \n Username: admin /n Password: 12345 \n Please Approve to Build the Docker Image in Testing Environment\n\n${BUILD_URL}input/",
-                    mimeType: 'text/html',
-                    recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                    from: "dharshak214",
-                    to: "${MailToRecipients}",              
-                )
+                    emailext (
+                        subject: "Approval Needed to Build Docker Image",
+                        body: "SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME} \n Username: admin /n Password: 12345 \n Please Approve to Build the Docker Image in Testing Environment\n\n${BUILD_URL}input/",
+                        mimeType: 'text/html',
+                        recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
+                        from: "dummymail",
+                        to: "${MailToRecipients}",              
+                    )
+                }
             }
-        }
         }
         stage('Approval-Build Image') {
             steps {
@@ -80,37 +69,35 @@ pipeline {
         }
         stage('Create a ECR Repository') {
             steps {
-                withCredentials([[
-                $class: 'AmazonWebServicesCredentialsBinding',
-                credentialsId: "${AWS_Credentials_Id}",
-                accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) 
+                withCredentials([[ 
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: "${AWS_Credentials_Id}",
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) 
                 {
-                sh '''
-                aws ecr create-repository --repository-name ${ECR_Repo_Name} --region ${Region_Name} || true
-                cd /var/lib/jenkins/workspace/${Workspace_name}
-                '''
+                    sh '''
+                    aws ecr create-repository --repository-name ${ECR_Repo_Name} --region ${Region_Name} || true
+                    cd /var/lib/jenkins/workspace/${Workspace_name}
+                    '''
                 }
             }
         }
         stage('Build and Push the Docker Image to ECR Repository') {
             steps {
-                withDockerRegistry(credentialsId: "${ECR_Credentials}", url: 'https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com') 
-              {
-                script {
-                def DockerfilePath = sh(script: 'find -name ${Docker_File_Name}', returnStdout: true)
-                    DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
-                    echo("${DockerfilePath}")
-            
-                sh """
-                docker build . -t ${ECR_Repo_Name} -f /var/lib/jenkins/workspace/${Workspace_name}/${DockerfilePath} 
-                docker tag ${ECR_Repo_Name}:latest ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                """
-           }
+                withDockerRegistry(credentialsId: "${ECR_Credentials}", url: 'https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com') {
+                    script {
+                        def DockerfilePath = sh(script: 'find -name ${Docker_File_Name}', returnStdout: true)
+                        DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
+                        echo("${DockerfilePath}")
+
+                        sh """
+                            docker build . -t ${ECR_Repo_Name} -f /var/lib/jenkins/workspace/${Workspace_name}/${DockerfilePath}
+                            docker tag ${ECR_Repo_Name}:latest ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                            docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                        """
+                    }
+                }
+            }
         }
     }
- }
-        
-}
 }
