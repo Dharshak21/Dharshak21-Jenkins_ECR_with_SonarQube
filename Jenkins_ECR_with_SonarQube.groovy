@@ -7,7 +7,7 @@ pipeline {
         string(name: 'Docker_File_Name', description: 'Enter the Name of Your Dockerfile (Eg:DockerFile)')
         choice(
             choices: ["us-east-1","us-east-2","us-west-1","us-west-2","ap-south-1","ap-northeast-3","ap-northeast-2","ap-southeast-1","ap-southeast-2","ap-northeast-1","ca-central-1","eu-central-1","eu-west-1","eu-west-2","eu-west-3","eu-north-1","sa-east-1"],
-            description: 'Select your Region Name (eg: us-east-1). To Know your region code refer URL "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.RegionsAndAvailabilityZones.html#Concepts.RegionsAndAvailabilityZones.Regions"',
+            description: 'Select your Region Name (eg: us-east-1)',
             name: 'Region_Name'
         )
         string(name: 'ECR_Repo_Name', defaultValue: 'ecr_default_repo', description: 'ECR Repositary (Default: ecr_default_repo)')
@@ -53,13 +53,12 @@ pipeline {
                     ).trim()
                     emailext(
                         subject: "Approval Needed to Build Docker Image",
-                        body: """SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}<br>
-                                 Username: admin<br>Password: 12345<br>
-                                 Please Approve to Build the Docker Image in Testing Environment<br><br>
-                                 <a href="${BUILD_URL}input/">Click to Approve</a>""",
+                        body: """<p><strong>SonarQube Analysis Report:</strong></p>
+                                 <p><a href="http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}">View Report</a></p>
+                                 <p>Username: <strong>admin</strong><br>Password: <strong>12345</strong></p>
+                                 <p>Please approve the Docker image build:</p>
+                                 <p><a href="${BUILD_URL}input/">Click to Approve</a></p>""",
                         mimeType: 'text/html',
-                        recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                        from: "dummymail",
                         to: "${MailToRecipients}"
                     )
                 }
@@ -108,15 +107,12 @@ pipeline {
         always {
             emailext(
                 subject: "Jenkins Build: ${currentBuild.currentResult} - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                    <p><strong>Build Result:</strong> ${currentBuild.currentResult}</p>
-                    <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
-                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                """,
+                body: """<p><strong>Build Result:</strong> ${currentBuild.currentResult}</p>
+                         <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                         <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
+                         <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>""",
                 mimeType: 'text/html',
-                to: "${MailToRecipients}",
-                from: "dummymail"
+                to: "${MailToRecipients}"
             )
         }
     }
