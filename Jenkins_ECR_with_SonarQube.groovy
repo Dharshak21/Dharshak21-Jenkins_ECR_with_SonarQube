@@ -7,7 +7,7 @@ pipeline {
         string(name: 'Docker_File_Name', description: 'Enter the Name of Your Dockerfile (Eg:DockerFile)')
         choice(
             choices: ["us-east-1","us-east-2","us-west-1","us-west-2","ap-south-1","ap-northeast-3","ap-northeast-2","ap-southeast-1","ap-southeast-2","ap-northeast-1","ca-central-1","eu-central-1","eu-west-1","eu-west-2","eu-west-3","eu-north-1","sa-east-1"],
-            description: 'Select your Region Name (eg: us-east-1). To Know your region code refer URL "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.RegionsAndAvailabilityZones.html#Concepts.RegionsAndAvailabilityZones.Regions"',
+            description: 'Select your Region Name',
             name: 'Region_Name'
         )
         string(name: 'ECR_Repo_Name', defaultValue: 'ecr_default_repo', description: 'ECR Repositary (Default: ecr_default_repo)')
@@ -15,18 +15,21 @@ pipeline {
         string(name: 'Workspace_name', defaultValue: 'Jenkins_ECR_with_SonarQube_CodeTest', description: 'Workspace name')
         string(name: 'AWS_Credentials_Id', defaultValue: 'AWS_Credentials', description: 'AWS Credentials Id')
         string(name: 'Git_Credentials_Id', defaultValue: 'Github_Credentials', description: 'Git Credentials Id')
-        string(name: 'SONAR_PROJECT_NAME', defaultValue: 'SonarScannerCheck', description: 'Sonar Project Name (Default: SonarScannerCheck)')
+        string(name: 'SONAR_PROJECT_NAME', defaultValue: 'SonarScannerCheck', description: 'Sonar Project Name')
     }
+
     environment {
         ECR_Credentials = "ecr:${Region_Name}:AWS_Credentials"
         S3_Url = 'https://yamlclusterecs1.s3.amazonaws.com/master.yaml'
     }
+
     stages {
         stage('Clone the Git Repository') {
             steps {
                 git branch: 'main', credentialsId: "${Git_Credentials_Id}", url: "${Git_Hub_URL}"
             }
         }
+
         stage('Docker start') {
             steps {
                 sh '''
@@ -37,6 +40,7 @@ pipeline {
                 '''
             }
         }
+
         stage('Wait for SonarQube to Start') {
             steps {
                 script {
@@ -44,37 +48,20 @@ pipeline {
                 }
             }
         }
-        stage('Send Sonar Analysis Report and Approval Email for Build Image') {
-            steps {
-                script {
-                    def Jenkins_IP = sh(
-                        returnStdout: true,
-                        script: 'cat ip.txt'
-                    ).trim()
-                    emailext(
-                        subject: "Approval Needed to Build Docker Image",
-                        body: """SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME}<br>
-                                 Username: admin<br>Password: 12345<br>
-                                 Please Approve to Build the Docker Image in Testing Environment<br><br>
-                                 <a href="${BUILD_URL}input/">Click to Approve</a>""",
-                        mimeType: 'text/html',
-                        recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                        from: "dharsha214",
-                        to: "${MailToRecipients}"
-                    )
-                }
-            }
-        }
+
+        // ✅ Removed intermediate email step
+
         stage('Approval-Build Image') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Please approve the build image process by clicking the link provided in the email.', ok: 'Proceed'
+                    input message: 'Please approve the build image process by clicking the link in Jenkins.', ok: 'Proceed'
                 }
             }
         }
+
         stage('Create a ECR Repository') {
             steps {
-                withCredentials([[
+                withCredentials([[ 
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: "${AWS_Credentials_Id}",
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
@@ -87,6 +74,7 @@ pipeline {
                 }
             }
         }
+
         stage('Build and Push the Docker Image to ECR Repository') {
             steps {
                 withDockerRegistry(credentialsId: "${ECR_Credentials}", url: "https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com") {
@@ -104,6 +92,7 @@ pipeline {
             }
         }
     }
+
     post {
         always {
             emailext(
@@ -120,4 +109,4 @@ pipeline {
             )
         }
     }
-}  
+}
