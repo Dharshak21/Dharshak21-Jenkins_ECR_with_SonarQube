@@ -93,13 +93,12 @@ pipeline {
                     script {
                         def DockerfilePath = sh(script: "find -name ${Docker_File_Name}", returnStdout: true).trim()
                         DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
-                        echo("${DockerfilePath}")
+                        echo "Dockerfile found at: ${DockerfilePath}"
                         sh """
                             aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
                             docker build . -t ${params.ECR_Repo_Name} -f ${dockerfilePath}
-                            docker build . -t ${ECR_Repo_Name} -f /var/lib/jenkins/workspace/${Workspace_name}/${DockerfilePath}
-                            docker tag ${ECR_Repo_Name}:latest ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                            docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                            docker tag ${ECR_Repo_Name}:latest ${imageName}
+                            docker push ${imageName}
                         """
                     }
                 }
