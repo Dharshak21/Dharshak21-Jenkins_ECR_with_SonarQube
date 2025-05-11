@@ -59,7 +59,7 @@ pipeline {
                                  <a href="${BUILD_URL}input/">Click to Approve</a>""",
                         mimeType: 'text/html',
                         recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                        from: "dharsha214",
+                        from: "dharsha214@gmail.com",
                         to: "${MailToRecipients}"
                     )
                 }
@@ -116,7 +116,7 @@ pipeline {
                 """,
                 mimeType: 'text/html',
                 to: "${MailToRecipients}",
-                from: "dharsha214"
+                from: "dharsha214@gmail.com"
             )
         }
     }
