@@ -97,9 +97,9 @@ pipeline {
                         echo "Dockerfile found at: ${DockerfilePath}"
                         sh """
                             aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
-                            docker build -t ${imageName} -f ${DockerfilePath} 
+                            docker build -t ${imageName} -f ${DockerfilePath} .
                             docker tag ${imageName} ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                             docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                            docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
                         """
                     }
                 }
