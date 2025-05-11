@@ -74,13 +74,14 @@ pipeline {
         }
         stage('Create a ECR Repository') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: "${AWS_Credentials_Id}",
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                withCredentials([[ 
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: "${AWS_Credentials_Id}", 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY' 
                 ]]) {
                     sh '''
+                    # Create ECR repository if it doesn't exist
                     aws ecr create-repository --repository-name ${ECR_Repo_Name} --region ${Region_Name} || true
                     cd /var/lib/jenkins/workspace/${Workspace_name}
                     '''
@@ -96,9 +97,13 @@ pipeline {
                         def imageName = "${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
                         echo "Dockerfile found at: ${DockerfilePath}"
                         sh """
+                            # Authenticate Docker to AWS ECR
                             aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
+                            # Build the Docker image
                             docker build -t ${imageName} -f ${DockerfilePath} .
+                            # Tag the image
                             docker tag ${imageName} ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+                            # Push the image to ECR
                             docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
                         """
                     }
@@ -122,4 +127,4 @@ pipeline {
             )
         }
     }
-}  
+}
