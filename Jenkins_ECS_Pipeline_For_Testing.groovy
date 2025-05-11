@@ -176,12 +176,12 @@ pipeline {
                      target = "${Endpoint_URL}"
                      if(scan_type == "Baseline"){
                          sh """
-                             docker exec owasp zap-baseline.py -t $target -r report.html -I 
+                             docker exec zaproxy /zap/zap-baseline.py -t $target -r report.html -I 
                          """
                      }
                     else if(scan_type == "Full"){
                          sh """
-                             docker exec owasp zap-full-scan.py -t $target -r report.html -I
+                             docker exec zaproxy /zap/zap-full-scan.py -t $target -r report.html -I
                          """
                           }
                      else{
@@ -194,7 +194,7 @@ pipeline {
              steps {
                  script {
                      sh '''
-                            docker cp owasp:/zap/wrk/report.html ${WORKSPACE}/report.html
+                            docker cp zaproxy:/zap/wrk/report.html ${WORKSPACE}/report.html
                      '''
                  }
              }
