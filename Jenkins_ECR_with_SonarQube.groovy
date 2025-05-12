@@ -59,7 +59,7 @@ pipeline {
                                  <a href="${BUILD_URL}input/">Click to Approve</a>""",
                         mimeType: 'text/html',
                         recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                        from: "dharsha214@gmail.com",
+                        from: "dummymail@gmail.com",
                         to: "${MailToRecipients}"
                     )
                 }
@@ -97,13 +97,9 @@ pipeline {
                         def imageName = "${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
                         echo "Dockerfile found at: ${DockerfilePath}"
                         sh """
-                            # Authenticate Docker to AWS ECR
                             aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
-                            # Build the Docker image
                             docker build -t ${imageName} -f ${DockerfilePath} .
-                            # Tag the image
                             docker tag ${imageName} ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                            # Push the image to ECR
                             docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
                         """
                     }
@@ -123,7 +119,7 @@ pipeline {
                 """,
                 mimeType: 'text/html',
                 to: "${MailToRecipients}",
-                from: "dharsha214@gmail.com"
+                from: "dummymail@gmail.com"
             )
         }
     }
