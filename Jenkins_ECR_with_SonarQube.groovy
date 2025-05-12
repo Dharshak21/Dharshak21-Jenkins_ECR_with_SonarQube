@@ -18,7 +18,7 @@ pipeline {
         string(name: 'SONAR_PROJECT_NAME', defaultValue: 'SonarScannerCheck', description: 'Sonar Project Name (Default: SonarScannerCheck)')
     }
     environment {
-        ECR_Credentials = "ecr:${Region_Name}:AWS_Credentials"
+        ECR_Credentials = "${AWS_Credentials_Id}"
         S3_Url = 'https://yamlclusterecs1.s3.amazonaws.com/master.yaml'
     }
     stages {
