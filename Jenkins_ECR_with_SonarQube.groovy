@@ -88,24 +88,36 @@ pipeline {
                 }
             }
         }
-        stage('Build and Push the Docker Image to ECR Repository') {
-            steps {
-                withDockerRegistry(credentialsId: "${ECR_Credentials}", url: "https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com") {
-                    script {
-                        def DockerfilePath = sh(script: "find -name ${Docker_File_Name}", returnStdout: true).trim()
-                        DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
-                        def imageName = "${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
-                        echo "Dockerfile found at: ${DockerfilePath}"
-                        sh """
-                            aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
-                            docker build -t ${imageName} -f ${DockerfilePath} .
-                            docker tag ${imageName} ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                            docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                        """
-                    }
-                }
+     stage('Build and Push the Docker Image to ECR Repository') {
+    steps {
+        withCredentials([
+            [$class: 'AmazonWebServicesCredentialsBinding', 
+             credentialsId: "${AWS_Credentials_Id}", 
+             accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+        ]) {
+            script {
+                def DockerfilePath = sh(script: "find -name ${Docker_File_Name}", returnStdout: true).trim()
+                DockerfilePath = DockerfilePath.replaceAll('^\\./', '') // fix leading "./"
+
+                def imageName = "${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
+
+                echo "Dockerfile found at: ${DockerfilePath}"
+
+                sh """
+                    # Login to ECR
+                    aws ecr get-login-password --region ${Region_Name} | docker login --username AWS --password-stdin ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com
+
+                    # Build Docker image
+                    docker build -t ${imageName} -f ${DockerfilePath} .
+
+                    # Push to ECR
+                    docker push ${imageName}
+                """
             }
         }
+    }
+}
     }
     post {
         always {
