@@ -97,24 +97,26 @@ pipeline {
              secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
         ]) {
             script {
-                def DockerfilePath = sh(script: "find -name ${Docker_File_Name}", returnStdout: true).trim()
-                DockerfilePath = DockerfilePath.replaceAll('^\\./', '') // fix leading "./"
+    echo "DEBUG VALUES:"
+    echo "AWS_Account_Id: ${params.AWS_Account_Id}"
+    echo "Region_Name: ${params.Region_Name}"
+    echo "ECR_Repo_Name: ${params.ECR_Repo_Name}"
+    echo "Version_Number: ${params.Version_Number}"
 
-                def imageName = "${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
+    def imageName = "${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com/${params.ECR_Repo_Name}:${params.Version_Number}"
+    echo " Docker image name will be: ${imageName}"
 
-                echo "Dockerfile found at: ${DockerfilePath}"
+    def DockerfilePath = sh(script: "find -name ${params.Docker_File_Name}", returnStdout: true).trim()
+    echo " Dockerfile found at: ${DockerfilePath}"
 
-                sh """
-                    # Login to ECR
-                    aws ecr get-login-password --region ${Region_Name} | docker login --username AWS --password-stdin ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com
+    sh """
+        aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
 
-                    # Build Docker image
-                    docker build -t ${imageName} -f ${DockerfilePath} .
+        docker build -t ${imageName} -f ${DockerfilePath} .
 
-                    # Push to ECR
-                    docker push ${imageName}
-                """
-            }
+        docker push ${imageName}
+    """
+}
         }
     }
 }
