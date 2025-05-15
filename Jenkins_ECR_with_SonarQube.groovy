@@ -88,32 +88,43 @@ pipeline {
                 }
             }
         }
-     stage('Build and Push the Docker Image to ECR Repository') {
-    steps {
-        withCredentials([
-            [$class: 'AmazonWebServicesCredentialsBinding', 
-             credentialsId: "${AWS_Credentials_Id}", 
-             accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
-             secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
-        ]) {
-            script {
-    echo "DEBUG VALUES:"
-    echo "AWS_Account_Id: ${params.AWS_Account_Id}"
-    echo "Region_Name: ${params.Region_Name}"
-    echo "ECR_Repo_Name: ${params.ECR_Repo_Name}"
-    echo "Version_Number: ${params.Version_Number}"
-    def imageName = "${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com/${params.ECR_Repo_Name}:${params.Version_Number}"
-    echo " Docker image name will be: ${imageName}"
-    def DockerfilePath = sh(script: "find -name ${params.Docker_File_Name}", returnStdout: true).trim()
-    echo "FOUND Dockerfile at: ${DockerfilePath}"    
-    sh """
-        aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
-        docker build -t ${imageName} -f ${DockerfilePath} .
-        docker push ${imageName}
-    """
-}
-        }
+   stage('Build and Push the Docker Image to ECR Repository') {
+  withCredentials([[
+    $class: 'AmazonWebServicesCredentialsBinding',
+    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+  ]]) {
+    script {
+      echo "DEBUG VALUES:"
+      echo "AWS_Account_Id: ${AWS_Account_Id}"
+      echo "Region_Name: ${Region_Name}"
+      echo "ECR_Repo_Name: ${ECR_Repo_Name}"
+      echo "Version_Number: ${Version_Number}"
+      echo "Docker image name will be: ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}"
+
+      // Check if Dockerfile exists
+      sh '''
+        echo "Workspace contents:"
+        ls -la
+        echo "Searching for Dockerfile..."
+        DOCKERFILE_PATH=$(find . -name Dockerfile | head -1)
+        if [ -z "$DOCKERFILE_PATH" ]; then
+          echo "ERROR: Dockerfile not found!"
+          exit 1
+        else
+          echo "Dockerfile found at: ${DOCKERFILE_PATH}"
+        fi
+      '''
+
+      // Build and push
+      sh '''
+        aws ecr get-login-password --region ${Region_Name} | docker login --username AWS --password-stdin ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com
+        docker buildx build -t ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number} -f Dockerfile . --load
+        docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
+      '''
     }
+  }
+}
 }
     }
     post {
