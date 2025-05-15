@@ -48,30 +48,22 @@ pipeline {
                }
             }
         }
-        stage('SonarQube Analysis') {
-            steps {
-            script {
-                def scannerHome = tool 'sonarqube'; 
-                withSonarQubeEnv('Default')  {
-                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${SONAR_PROJECT_NAME}"
-                    }
-                }
-            }
-        }
-        stage('Send Sonar Analysis Report and Approval Email for Build Image') {
+        
+       stage('Send Sonar Analysis Report and Approval Email') {
             steps {
                 script {
-                    def Jenkins_IP = sh(
-                        returnStdout: true,
-                        script: 'cat ip.txt'
-                    )
-                emailext (
-                    subject: "Approval Needed to Build Docker Image",
-                    body: "SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${SONAR_PROJECT_NAME} \n Username: admin /n Password: 12345 \n Please Approve to Build the Docker Image in Testing Environment\n\n${BUILD_URL}input/",
-                    mimeType: 'text/html',
-                    recipientProviders: [[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                    from: "dharshak214",
-                    to: "${MailToRecipients}",              
+                    def Jenkins_IP = sh(script: 'cat ip.txt', returnStdout: true).trim()
+                    emailext(
+                        subject: "Approval Needed to Build Docker Image",
+                        body: """
+                            <p>SonarQube Analysis Report URL: http://${Jenkins_IP}:9000/dashboard?id=${params.SONAR_PROJECT_NAME}</p>
+                            <p>Username: admin<br>Password: 12345</p>
+                            <p>Please Approve to Build the Docker Image in Testing Environment</p>
+                            <p><a href="${env.BUILD_URL}input/">Click to Approve</a></p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${params.MailToRecipients}",
+                        from: "dharshak214@gmail.com"   
                 )
             }
         }
