@@ -106,16 +106,13 @@ pipeline {
     def imageName = "${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com/${params.ECR_Repo_Name}:${params.Version_Number}"
     echo " Docker image name will be: ${imageName}"
 
-   def DockerfilePath = "Dockerfile"
-   def buildContext = "."    
-   echo " Dockerfile found at: ${DockerfilePath}"
-   echo "Build context: ${buildContext}"
-   echo "Image name: ${imageName}"
+   def DockerfilePath = sh(script: "find . -name Dockerfile", returnStdout: true).trim()
+   echo "FOUND Dockerfile at: ${DockerfilePath}"
 
     sh """
         aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
 
-        docker build -t ${imageName} -f ${DockerfilePath} ${buildContext}
+        docker build -t ${imageName} -f ${DockerfilePath} .
 
         docker push ${imageName}
     """
