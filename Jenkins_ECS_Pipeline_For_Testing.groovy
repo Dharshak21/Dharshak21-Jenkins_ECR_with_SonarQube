@@ -90,21 +90,32 @@ pipeline {
                 }
             }
         }
-        stage('Build and Push the Docker Image to ECR Repository') {
+       stage('Build and Push Docker Image') {
             steps {
-                withDockerRegistry(credentialsId: "${ECR_Credentials}", url: 'https://${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com') 
-              {
-                script {
-                def DockerfilePath = sh(script: 'find -name ${Docker_File_Name}', returnStdout: true)
-                    DockerfilePath = DockerfilePath.replaceAll('^\\.[\\\\/]', '')
-                    echo("${DockerfilePath}")
-            
-                sh """
-                docker build . -t ${ECR_Repo_Name} -f /var/lib/jenkins/workspace/${Workspace_name}/${DockerfilePath} 
-                docker tag ${ECR_Repo_Name}:latest ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-                docker push ${AWS_Account_Id}.dkr.ecr.${Region_Name}.amazonaws.com/${ECR_Repo_Name}:${Version_Number}
-               
-                """
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', 
+                     credentialsId: "${params.AWS_Credentials_Id}", 
+                     accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                ]) {
+                    script {
+                        // Find Dockerfile path
+                        def dockerfilePath = sh(script: "find . -type f -name '${params.Docker_File_Name}' | head -n 1", returnStdout: true).trim()
+                        
+                        if (!dockerfilePath) {
+                            error "Dockerfile not found in workspace!"
+                        }
+                        
+                        echo "Found Dockerfile at: ${dockerfilePath}"
+                        
+                        def imageName = "${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com/${params.ECR_Repo_Name}:${params.Version_Number}"
+                        
+                        sh """
+                            echo "Building Docker image: ${imageName}"
+                            aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
+                            docker build -t ${imageName} -f ${dockerfilePath} .
+                            docker push ${imageName}
+                        """
              
             }
         }
