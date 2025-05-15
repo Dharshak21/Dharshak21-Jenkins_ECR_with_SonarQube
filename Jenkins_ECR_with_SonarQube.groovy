@@ -104,7 +104,7 @@ pipeline {
     echo "Version_Number: ${params.Version_Number}"
     def imageName = "${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com/${params.ECR_Repo_Name}:${params.Version_Number}"
     echo " Docker image name will be: ${imageName}"
-    def DockerfilePath = sh(script: "readlink -f \$(find . -name Dockerfile | head -1)", returnStdout: true).trim()
+    def DockerfilePath = sh(script: "find -name ${params.Docker_File_Name}", returnStdout: true).trim()
     echo "FOUND Dockerfile at: ${DockerfilePath}"    
     sh """
         aws ecr get-login-password --region ${params.Region_Name} | docker login --username AWS --password-stdin ${params.AWS_Account_Id}.dkr.ecr.${params.Region_Name}.amazonaws.com
