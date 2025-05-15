@@ -126,7 +126,6 @@ pipeline {
   }
 }
 }
-    }
     post {
         always {
             emailext(
