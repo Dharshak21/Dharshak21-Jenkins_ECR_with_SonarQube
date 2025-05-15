@@ -102,7 +102,7 @@ pipeline {
                 ]) {
                     script {
                         // Find Dockerfile path
-                        def dockerfilePath = sh(script: "find . -name '${params.Docker_File_Name}' -print -quit", returnStdout: true).trim()
+                        def dockerfilePath = sh(script: "find . -type f -name '${params.Docker_File_Name}' | head -n 1", returnStdout: true).trim()
                         
                         if (!dockerfilePath) {
                             error "Dockerfile not found in workspace!"
